@@ -1,1 +1,5 @@
 # mydocker
+
+```bash
+make install
+```
