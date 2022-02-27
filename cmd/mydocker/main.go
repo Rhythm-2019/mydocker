@@ -6,6 +6,7 @@ import (
 	"github.com/rhythm_2019/mydocker/container/cgroup/limiter"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,7 +38,21 @@ func main() {
 				// TODO init logic
 				log.Debugf("init a process[%d]", syscall.Getpid())
 
-				cmd := context.Args().Get(0)
+				// Get cmd
+				fd := os.NewFile(uintptr(3), "pipe")
+				fullCmdBytes, err := ioutil.ReadAll(fd)
+				if err != nil {
+					log.Fatalf("init: read cmd failed, detail is %v", err)
+				}
+
+				fullCmd := string(fullCmdBytes)
+				cmdAndArgs := strings.Split(fullCmd, " ")
+
+				path, err := exec.LookPath(cmdAndArgs[0])
+				if err != nil {
+					log.Fatalf("init: %s command no found, detail is %v", cmdAndArgs[0], err)
+				}
+				log.Infof("run a command %s", fullCmd)
 
 				// mount proc
 				executable, _ := os.Executable()
@@ -53,9 +68,7 @@ func main() {
 				if err := syscall.Mount("proc", mountDir, "proc", uintptr(flags), ""); err != nil {
 					log.Fatal("mount:", err)
 				}
-				log.Infof("run a command %s", cmd)
-				cmdAndArgs := strings.Split(cmd, " ")
-				if err := syscall.Exec(cmdAndArgs[0], cmdAndArgs, os.Environ()); err != nil {
+				if err := syscall.Exec(path, cmdAndArgs, os.Environ()); err != nil {
 					log.Fatal("exec:", err)
 				}
 				return nil
@@ -108,7 +121,7 @@ func main() {
 						Value:   "1000",
 					})
 				}
-				Run(context.Args().First(), context.Bool("it"), resouseCfgs)
+				Run(strings.Join(context.Args().Slice(), " "), context.Bool("it"), resouseCfgs)
 				return nil
 			},
 		},
@@ -119,13 +132,20 @@ func main() {
 }
 
 func Run(cmd string, tty bool, resourceCfgs []*cgroup.CgroupConfig) {
+	// create a pipe to pass command
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		log.Fatalf("run: failed to open pipe, detail is %v", err)
+	}
 	// create a child process
-	process := exec.Command("/proc/self/exe", "init", cmd)
+	process := exec.Command("/proc/self/exe", "init")
 	process.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWPID | syscall.CLONE_NEWUTS |
 			syscall.CLONE_NEWNET | syscall.CLONE_NEWIPC,
 		Unshareflags: syscall.CLONE_NEWNS,
+		Setpgid:      true,
 	}
+	process.ExtraFiles = []*os.File{readPipe}
 	if tty {
 		process.Stdin = os.Stdin
 		process.Stdout = os.Stdout
@@ -135,6 +155,14 @@ func Run(cmd string, tty bool, resourceCfgs []*cgroup.CgroupConfig) {
 		log.Fatal(err)
 	}
 	log.Infof("process %d is running", process.Process.Pid)
+
+	// send cmd
+	_, err = writePipe.WriteString(cmd)
+	if err != nil {
+		_ = process.Process.Kill()
+		log.Fatal(err)
+	}
+	writePipe.Close()
 
 	// limit resource
 	manager := cgroup.NewCgroupManager("mydocker-"+strconv.Itoa(process.Process.Pid), resourceCfgs)
