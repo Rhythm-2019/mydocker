@@ -2,32 +2,35 @@ package main
 
 import (
 	"fmt"
+	"github.com/rhythm_2019/mydocker/container"
 	"github.com/rhythm_2019/mydocker/container/cgroup"
 	"github.com/rhythm_2019/mydocker/container/cgroup/limiter"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
-	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 )
 
-var VERSAION = "<UNDEFINED>"
+var Version = "<UNDEFINED>"
 
 func main() {
 	app := cli.NewApp()
 	app.Name = "mydocker"
 	app.Usage = "a simple container runtime implementation like docker"
 
+	app.Before = func(context *cli.Context) error {
+		log.SetLevel(log.DebugLevel)
+		return nil
+	}
 	app.Commands = []*cli.Command{
 		{
 			Name:  "version",
 			Usage: "show mydocker version",
 			Action: func(context *cli.Context) error {
-				fmt.Println(VERSAION)
+				fmt.Println(Version)
 				return nil
 			},
 		},
@@ -35,42 +38,10 @@ func main() {
 			Name:  "init",
 			Usage: "initial container",
 			Action: func(context *cli.Context) error {
-				// TODO init logic
 				log.Debugf("init a process[%d]", syscall.Getpid())
-
-				// Get cmd
-				fd := os.NewFile(uintptr(3), "pipe")
-				fullCmdBytes, err := ioutil.ReadAll(fd)
-				if err != nil {
-					log.Fatalf("init: read cmd failed, detail is %v", err)
-				}
-
-				fullCmd := string(fullCmdBytes)
-				cmdAndArgs := strings.Split(fullCmd, " ")
-
-				path, err := exec.LookPath(cmdAndArgs[0])
-				if err != nil {
-					log.Fatalf("init: %s command no found, detail is %v", cmdAndArgs[0], err)
-				}
-				log.Infof("run a command %s", fullCmd)
-
-				// mount proc
-				executable, _ := os.Executable()
-				mountDir := filepath.Join(filepath.Dir(executable), "proc")
-				if _, err := os.Stat(mountDir); os.IsNotExist(err) {
-					if err := os.Mkdir(mountDir, 0775); err != nil {
-						log.Fatal("mkdir:", err)
-					}
-				}
-				flags := syscall.MS_NOEXEC | syscall.MS_NODEV | syscall.MS_NOSUID
-				//	syscall.MS_PRIVATE | syscall.MS_REC
-				//flags := syscall.MS_PRIVATE
-				if err := syscall.Mount("proc", mountDir, "proc", uintptr(flags), ""); err != nil {
-					log.Fatal("mount:", err)
-				}
-				if err := syscall.Exec(path, cmdAndArgs, os.Environ()); err != nil {
-					log.Fatal("exec:", err)
-				}
+				cm := container.ContainerManager{}
+				cm.Init()
+				cm.Start()
 				return nil
 			},
 		},
@@ -143,8 +114,8 @@ func Run(cmd string, tty bool, resourceCfgs []*cgroup.CgroupConfig) {
 		Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWPID | syscall.CLONE_NEWUTS |
 			syscall.CLONE_NEWNET | syscall.CLONE_NEWIPC,
 		Unshareflags: syscall.CLONE_NEWNS,
-		Setpgid:      true,
 	}
+	process.Dir = "/home/chenxiaosen/go/src/mydocker/busybox"
 	process.ExtraFiles = []*os.File{readPipe}
 	if tty {
 		process.Stdin = os.Stdin
