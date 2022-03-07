@@ -19,8 +19,6 @@ const (
 	CPU_PERIOD            = "cpu.cpu.cfs_period_us"
 )
 
-var CgroupRootPath string
-
 type SubsystemLimiter interface {
 	Item() string
 	Subsystem() string

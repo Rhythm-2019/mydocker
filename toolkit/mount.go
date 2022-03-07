@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -40,5 +41,24 @@ func PivotRoot(targetRoot string) error {
 	if err := syscall.Chdir("/"); err != nil {
 		return fmt.Errorf("pivot root: chdir new root to / failed, detail is %v", err)
 	}
+	return nil
+}
+
+
+func MakeMountPoint(upperDir, workDir, lowerDir, mergeDir string) error {
+
+	dirs := []string{upperDir, workDir, lowerDir}
+	for _, dir := range dirs {
+		err := CreateDir(dir)
+		if err != nil {
+			return err
+		}
+	}
+	source := fmt.Sprintf("dirs=%s", strings.Join(dirs, ":"))
+	err := syscall.Mount(source, mergeDir, "aufs", uintptr(0), "none")
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
