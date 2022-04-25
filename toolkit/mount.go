@@ -3,6 +3,7 @@ package toolkit
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -54,7 +55,9 @@ func MakeMountPoint(upperDir, workDir, lowerDir, mergeDir string) error {
 		}
 	}
 	source := fmt.Sprintf("dirs=%s", strings.Join(dirs[:3], ":"))
-	err := syscall.Mount(source, mergeDir, "aufs", uintptr(0), "none")
+	// TODO 这种方式不知道为什么报错 invalid argument
+	//err := syscall.Mount(source, mergeDir, "aufs", syscall.MS_, "")
+	err := exec.Command("mount", "-t", "aufs", "-o", source, "none", mergeDir).Run()
 	if err != nil {
 		return fmt.Errorf("mount: fail mount %s to %s in aufs, detail is %v", source, mergeDir, err)
 	}
@@ -64,13 +67,13 @@ func MakeMountPoint(upperDir, workDir, lowerDir, mergeDir string) error {
 
 func MakeBindMount(source, target string) error {
 	if !HasDir(source) {
-		return fmt.Errorf("mount dir %S no found", source)
+		return fmt.Errorf("mount dir %s no found", source)
 	}
 	if err := CreateDir(target); err != nil {
 		return err
 	}
 
-	err := syscall.Mount(source, target, "bind", syscall.MS_BIND, "")
+	err := syscall.Mount(source, target, "bind", syscall.MS_BIND|syscall.MS_REC, "")
 	if err != nil {
 		return fmt.Errorf("mount: fail mount %s to %s in bind, detail is %v", source, target, err)
 	}
@@ -78,4 +81,17 @@ func MakeBindMount(source, target string) error {
 }
 func RemoveBindMount(target string) error {
 	return syscall.Unmount(target, 0)
+}
+
+func MountProc() error {
+	if err := CreateDir("/proc"); err != nil {
+		return err
+	}
+	return syscall.Mount("proc", "/proc", "proc", uintptr(syscall.MS_NOEXEC|syscall.MS_NODEV|syscall.MS_NOSUID), "")
+}
+func MountDev() error {
+	if err := CreateDir("/dev"); err != nil {
+		return err
+	}
+	return syscall.Mount("tmpfs", "/dev", "tmpfs", uintptr(syscall.MS_NOEXEC|syscall.MS_STRICTATIME), "")
 }

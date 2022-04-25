@@ -33,10 +33,12 @@ func NewImage(imageUrl string) error {
 		return fmt.Errorf("image file no found")
 	}
 	name, ext := toolkit.NameAndExtInPath(absPath)
-	if ext != "tar.gz" {
-		return fmt.Errorf("image file ext should be tar.gz")
+	if ext != "tar" {
+		return fmt.Errorf("image file ext should be tar")
 	}
-
+	if _, err := GetImageRecordByName(name); err == nil {
+		return fmt.Errorf("image exist")
+	}
 	image := &Image{
 		BaseModel: BaseModel{
 			Id:         toolkit.SnowflakeId(),
@@ -50,7 +52,7 @@ func NewImage(imageUrl string) error {
 	if err = toolkit.CreateDir(image.LowerDir); err != nil {
 		return fmt.Errorf("store: create LowerLaye failed, detail is %v", err)
 	}
-	if err = toolkit.UnTarGz(absPath, image.LowerDir); err != nil {
+	if err = toolkit.Untar(absPath, image.LowerDir); err != nil {
 		return fmt.Errorf("store: untar %s failed, detail is %v", absPath, err)
 	}
 	log.Infof("image: new image untar in %s", image.LowerDir)

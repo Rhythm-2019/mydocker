@@ -195,8 +195,9 @@ func main() {
 					volumnArgsSliece := strings.Split(volumnArg, ":")
 					var hostDIr, volumnDir string
 					if len(volumnArgsSliece) == 1 && len(volumnArgsSliece[0]) != 0 {
-						hostDIr = filepath.Join(cfg.StorePath(), containerId, "_data", volumnArgsSliece[0])
-						volumnDir = volumnArgsSliece[0]
+						// TODO 后面再支持匿名挂载
+						//hostDIr = filepath.Join(cfg.StorePath(), containerId, "_data", volumnArgsSliece[0])
+						//volumnDir = volumnArgsSliece[0]
 					} else if len(volumnArgsSliece) == 2 {
 						hostDIr = volumnArgsSliece[0]
 						volumnDir = volumnArgsSliece[1]

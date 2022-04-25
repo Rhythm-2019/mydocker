@@ -10,32 +10,38 @@
 
 
 ##  开发计划
-
 1. 完成基础的 docker-cli 并支持下面命令
-* images
-* ps
-* run
-* exec
-* rm
-* rmi
-* save
-* network
-* start
-* stop
-
+    * images
+    * ps
+    * run
+    * exec
+    * rm
+    * rmi
+    * save
+    * network
+    * start
+    * stop
 2. 开发 mydockerd 容器管理工具，支持下面功能
-* 将 image 和 container 和 image 的信息保存到内存中
-* 修改容器启动模型，先启动 pause，再启动 entrypoint，方便支持远程方式管理容器（包括网络的调整、流量控制等）
-* 支持容器健康检查
-* 支持指标上报、日志采集
+    * 将 image 和 container 和 image 的信息保存到内存中
+    * 修改容器启动模型，先启动 pause，再启动 entrypoint，方便支持远程方式管理容器（包括网络的调整、流量控制等）
+    * 支持容器健康检查
+    * 支持指标上报、日志采集
 
 
 ##  开发进度
 * 支持下面功能
 
+##  文档
+
 ##  Qucik start
 安装 Go 环境，拉取仓库，运行下面指令
 ```bash
+# 编译
 make install
-./bin/mydocker
+
+# docker pull，这里目前是本地解压
+./bin/mydocker pull ./files/busybox.tar
+
+# 运行
+./bin/mydocker run -it busybox /bin/sh
 ```

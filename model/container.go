@@ -28,8 +28,8 @@ type Container struct {
 	Volumns       []*Volumn
 }
 type Volumn struct {
-	HostDir   string
-	VolumnDIr string
+	HostDir   string // 宿主机路径
+	VolumnDIr string // 容器路径
 }
 
 func (c *Container) Init() {
@@ -50,14 +50,12 @@ func (c *Container) Init() {
 	}
 
 	// mount proc
-	flags := syscall.MS_NOEXEC | syscall.MS_NODEV | syscall.MS_NOSUID
-	if err := syscall.Mount("proc", "/proc", "proc", uintptr(flags), ""); err != nil {
-		log.Fatal("mount:", err)
+	if err := toolkit.MountProc(); err != nil {
+		log.Fatalf("mount proc failed, detail is %v", err)
 	}
 	// mount dev
-	flags = syscall.MS_NOEXEC | syscall.MS_STRICTATIME
-	if err := syscall.Mount("tmpfs", "/dev", "tmpfs", uintptr(flags), ""); err != nil {
-		log.Fatal("mount:", err)
+	if err := toolkit.MountDev(); err != nil {
+		log.Fatalf("mount dev failed, detail is %v", err)
 	}
 }
 
@@ -65,7 +63,7 @@ func (cm *Container) Start() {
 	// os.Environ() 复制一份环境变量
 	log.Infof("run a command %s", cm.Command)
 	if err := syscall.Exec(cm.Command[0], cm.Command, os.Environ()); err != nil {
-		log.Fatal("exec:", err)
+		log.Fatalf("exec %s failed, defail is %v:", cm.Command, err)
 	}
 }
 
@@ -88,7 +86,7 @@ func (c *Container) Bootstrap() {
 		log.Fatalf("run: failed to make mount point, detail is %v", err)
 	}
 	for _, volumn := range c.Volumns {
-		if err := toolkit.MakeBindMount(volumn.VolumnDIr, volumn.HostDir); err != nil {
+		if err := toolkit.MakeBindMount(volumn.HostDir, volumn.VolumnDIr); err != nil {
 			log.Fatalf("run: failed to make volumn, err is %v", err)
 		}
 	}
