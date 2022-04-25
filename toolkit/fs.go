@@ -37,10 +37,10 @@ func CreateDir(path string) error {
 }
 func HasFile(path string) bool {
 	stat, err := os.Stat(path)
-	if os.IsExist(err) && ! stat.IsDir(){
-		return true
+	if os.IsNotExist(err) {
+		return false
 	}
-	return false
+	return !stat.IsDir()
 }
 
 func HasDir(path string) bool {
@@ -51,15 +51,15 @@ func HasDir(path string) bool {
 	return false
 }
 func ContainFileOrDir(basePath, target string, isDir, recursion bool) (bool, string) {
-	if ! HasDir(basePath) {
+	if !HasDir(basePath) {
 		return false, ""
 	}
 	var (
-		found bool
+		found      bool
 		targetPath string
 	)
 	if recursion {
-		 filepath.Walk(basePath, func(path string, info fs.FileInfo, err error) error {
+		filepath.Walk(basePath, func(path string, info fs.FileInfo, err error) error {
 			if info.Name() == target {
 				if (isDir && info.IsDir()) || (!isDir && !info.IsDir()) {
 					found = true
@@ -84,9 +84,9 @@ func NameAndExtInPath(path string) (name, ext string) {
 	var i, p int
 	for i = len(path) - 1; i >= 0 && !os.IsPathSeparator(path[i]); i-- {
 		if path[i] == '.' {
-			ext = path[i:]
+			ext = path[i+1:]
 			p = i
 		}
 	}
-	return path[i:p], ext
+	return path[i+1 : p], ext
 }

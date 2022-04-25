@@ -44,21 +44,38 @@ func PivotRoot(targetRoot string) error {
 	return nil
 }
 
-
 func MakeMountPoint(upperDir, workDir, lowerDir, mergeDir string) error {
 
-	dirs := []string{upperDir, workDir, lowerDir}
+	dirs := []string{upperDir, workDir, lowerDir, mergeDir}
 	for _, dir := range dirs {
 		err := CreateDir(dir)
 		if err != nil {
 			return err
 		}
 	}
-	source := fmt.Sprintf("dirs=%s", strings.Join(dirs, ":"))
+	source := fmt.Sprintf("dirs=%s", strings.Join(dirs[:3], ":"))
 	err := syscall.Mount(source, mergeDir, "aufs", uintptr(0), "none")
 	if err != nil {
-		return err
+		return fmt.Errorf("mount: fail mount %s to %s in aufs, detail is %v", source, mergeDir, err)
 	}
 
 	return nil
+}
+
+func MakeBindMount(source, target string) error {
+	if !HasDir(source) {
+		return fmt.Errorf("mount dir %S no found", source)
+	}
+	if err := CreateDir(target); err != nil {
+		return err
+	}
+
+	err := syscall.Mount(source, target, "bind", syscall.MS_BIND, "")
+	if err != nil {
+		return fmt.Errorf("mount: fail mount %s to %s in bind, detail is %v", source, target, err)
+	}
+	return nil
+}
+func RemoveBindMount(target string) error {
+	return syscall.Unmount(target, 0)
 }

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -27,6 +28,11 @@ func main() {
 	app.Before = func(context *cli.Context) error {
 		log.SetLevel(log.DebugLevel)
 		cfg.Init()
+		model.Init()
+		return nil
+	}
+	app.After = func(context *cli.Context) error {
+		model.ReleaseDB()
 		return nil
 	}
 	app.Commands = []*cli.Command{
@@ -39,30 +45,28 @@ func main() {
 			},
 		},
 		{
-			Name: "pull",
+			Name:  "pull",
 			Usage: "make a new image",
 			Action: func(context *cli.Context) error {
 				if context.Args().Len() < 1 {
 					log.Fatalf("must pass a local image tar path")
 				}
-				err := model.NewImage(context.Args().First())
-				if err != nil {
+				if err := model.NewImage(context.Args().First()); err != nil {
 					log.Fatalf("add a new image failed, detail is %v", err)
 				}
 				return nil
 			},
 		},
 		{
-			Name: "images",
+			Name:  "images",
 			Usage: "list all image",
 			Action: func(context *cli.Context) error {
-				records, err := model.ListRecord(model.ImageType)
+				records, err := model.ListImageRecord()
 				if err != nil {
 					log.Fatalf("list images failed, detail is %v", err)
 				}
-				images := records.([]*model.Image)
 				fmt.Printf("ID\tNAME\tCREATE_TIME\n")
-				for _, image := range images {
+				for _, image := range records {
 					fmt.Printf("%s\t%s\t%s\n", image.Id, image.Name, image.CreateTime)
 				}
 				return nil
@@ -80,11 +84,10 @@ func main() {
 					log.Fatalf("init: read container id failed, detail is %v", err)
 				}
 				defer fd.Close()
-				record, err := model.GetRecord(string(containerId), model.ContainerType)
+				container, err := model.GetContainerRecord(string(containerId))
 				if err != nil {
 					log.Fatalf("init: get container record failed, detail is %v", err)
 				}
-				container := record.(*model.Container)
 				container.Init()
 				container.Start()
 				return nil
@@ -108,16 +111,20 @@ func main() {
 					Usage: "set cpu quote limit (cpu period is 1000us)",
 				},
 				&cli.StringFlag{
-					Name: "name",
+					Name:  "name",
 					Usage: "set a container name",
 				},
 				&cli.BoolFlag{
-					Name: "d",
+					Name:  "detach, d",
 					Usage: "detach, run in background",
 				},
 				&cli.StringSliceFlag{
-					Name: "e",
+					Name:  "e",
 					Usage: "set environment like key:value",
+				},
+				&cli.StringSliceFlag{
+					Name:  "v",
+					Usage: "make a bind mount",
 				},
 			},
 			Action: func(context *cli.Context) error {
@@ -127,10 +134,10 @@ func main() {
 				}
 				// image & cmd
 				var imageName = args.Get(0)
-				var command =  args.Slice()[1:]
+				var command = args.Slice()[1:]
 
 				image, err := model.FindImage(imageName)
-				if  err != nil {
+				if err != nil {
 					log.Fatal(err)
 				}
 
@@ -164,7 +171,7 @@ func main() {
 				}
 
 				// id and name
-				containerId, containerName := toolkit.RandUUID(), context.String("name")
+				containerId, containerName := toolkit.SnowflakeId(), context.String("name")
 				if len(containerName) == 0 {
 					containerName = containerId
 				}
@@ -181,11 +188,30 @@ func main() {
 					envKV[string(kvBytes[0])] = string(kvBytes[1])
 				}
 
+				// mount
+				volumnArgs := context.StringSlice("v")
+				var volumns []*model.Volumn
+				for _, volumnArg := range volumnArgs {
+					volumnArgsSliece := strings.Split(volumnArg, ":")
+					var hostDIr, volumnDir string
+					if len(volumnArgsSliece) == 1 && len(volumnArgsSliece[0]) != 0 {
+						hostDIr = filepath.Join(cfg.StorePath(), containerId, "_data", volumnArgsSliece[0])
+						volumnDir = volumnArgsSliece[0]
+					} else if len(volumnArgsSliece) == 2 {
+						hostDIr = volumnArgsSliece[0]
+						volumnDir = volumnArgsSliece[1]
+					}
+					volumns = append(volumns, &model.Volumn{
+						HostDir:   hostDIr,
+						VolumnDIr: volumnDir,
+					})
+				}
+
 				ctn := &model.Container{
 					BaseModel: model.BaseModel{
-						Id:          containerId,
-						Name:        containerName,
-						CreateTime:  time.Now().Format("2006-01-02 15:04:05"),
+						Id:         containerId,
+						Name:       containerName,
+						CreateTime: time.Now().Format("2006-01-02 15:04:05"),
 					},
 					Command:     command,
 					Environment: envKV,
@@ -195,6 +221,7 @@ func main() {
 					MergeDir:    filepath.Join(cfg.StorePath(), containerId, "merge"),
 					UpperDir:    filepath.Join(cfg.StorePath(), containerId, "upper"),
 					WorkDir:     filepath.Join(cfg.StorePath(), containerId, "work"),
+					Volumns:     volumns,
 				}
 				model.NewCgroupManager(ctn, resouseCfgs)
 				ctn.Bootstrap()
@@ -205,14 +232,16 @@ func main() {
 			Name: "rm",
 			Action: func(context *cli.Context) error {
 				if context.Args().Len() < 1 {
-					log.Fatalf("must pass conatiner name")
+					log.Fatalf("must pass conatiner name or id")
 				}
-				containerName := context.Args().First()
-				record, err := model.GetRecord(containerName, model.ContainerType)
+				input := context.Args().First()
+				container, err := model.GetContainerRecord(input)
 				if err != nil {
-					log.Fatalf("container record no found")
+					container, err = model.GetContainerRecordByName(input)
+					if err != nil {
+						log.Fatalf("container record no found")
+					}
 				}
-				container := record.(*model.Container)
 				if err = container.Delete(); err != nil {
 					log.Fatal(err)
 				}
