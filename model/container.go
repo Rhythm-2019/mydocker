@@ -7,6 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 )
 
@@ -86,7 +87,7 @@ func (c *Container) Bootstrap() {
 		log.Fatalf("run: failed to make mount point, detail is %v", err)
 	}
 	for _, volumn := range c.Volumns {
-		if err := toolkit.MakeBindMount(volumn.HostDir, volumn.VolumnDIr); err != nil {
+		if err := toolkit.MakeBindMount(volumn.HostDir, filepath.Join(c.UpperDir, volumn.VolumnDIr)); err != nil {
 			log.Fatalf("run: failed to make volumn, err is %v", err)
 		}
 	}
@@ -143,14 +144,25 @@ func (c *Container) Bootstrap() {
 }
 
 func (c *Container) Destroy() {
+	// 解除资源限制
 	if err := c.CgroupManager.Destory(); err != nil {
 		log.Fatal(err)
 	}
+	// 解除 bind mount
 	for _, volumn := range c.Volumns {
-		if err := toolkit.RemoveBindMount(volumn.VolumnDIr); err != nil {
-			log.Fatal(err)
+		if err := toolkit.Umount(volumn.VolumnDIr); err != nil {
+			log.Fatalf("umount %s failed, detail is %v", volumn.VolumnDIr, err)
 		}
 	}
+	// 解除 aufs
+	if err := toolkit.Umount(c.MergeDir); err != nil {
+		log.Fatalf("umount %s failed, detail is %v", c.MergeDir, err)
+	}
+	// 删除 upper 和 work
+	if err := toolkit.DeleteFiles(c.MergeDir, c.UpperDir, c.WorkDir); err != nil {
+		log.Fatalf("delete dir failed, detail is %v", err)
+	}
+	// 关闭日志文件描述符
 	if c.LogFd != nil {
 		c.LogFd.Close()
 	}

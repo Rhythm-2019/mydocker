@@ -90,3 +90,12 @@ func NameAndExtInPath(path string) (name, ext string) {
 	}
 	return path[i+1 : p], ext
 }
+
+func DeleteFiles(paths ...string) error {
+	for _, p := range paths {
+		if err := os.RemoveAll(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}

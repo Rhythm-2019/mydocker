@@ -79,7 +79,7 @@ func MakeBindMount(source, target string) error {
 	}
 	return nil
 }
-func RemoveBindMount(target string) error {
+func Umount(target string) error {
 	return syscall.Unmount(target, 0)
 }
 
